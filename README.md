@@ -31,11 +31,8 @@ start_DESource(source, output_device)
 ```
 Change system's parameters in real-time:
 ```julia
-# set parameter 1
+# set parameter 1 to 0.75
 set_param!(source, 1, 0.75)
-
-# set all parameters at once
-set_params!(source, [0.25, 0.75, 0.5, 0.75])
 ```
 Stop audio:
 ```julia
