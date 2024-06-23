@@ -6,7 +6,7 @@ version = "1.0.0-DEV"
 [deps]
 Atomix = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
 DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
-PortAudio = "80ea8bcb-4634-5cb3-8ee8-a132660d1d2d"
+libportaudio_jll = "2d7b7beb-0762-5160-978e-1ab83a1e8a31"
 
 [compat]
 julia = "1.6.7"
