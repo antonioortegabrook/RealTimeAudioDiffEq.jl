@@ -1,5 +1,7 @@
+include("libportaudio.jl")
+
+using .LibPortAudio
 using DifferentialEquations
-using PortAudio.LibPortAudio
 using Atomix: @atomicswap
 
 mutable struct RealTimeAudioDEControlData
@@ -431,7 +433,7 @@ Set the channel map of the DESource.
 """
 function set_channelmap!(source::DESource, channel_map::Array{Int})
 	# check variables
-	n_vars = length(source.data.problem.u0)
+	n_vars = length(source.data.problem.u0)::Int
 	for variable in channel_map
 		if variable > n_vars
 			error("variable $variable is out of bounds.")
