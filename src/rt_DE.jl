@@ -5,11 +5,11 @@ using DifferentialEquations
 using Atomix: @atomicswap
 
 mutable struct RealTimeAudioDEControlData
-	@atomic u0::Array{Float64}
-	@atomic p::Array{Float64}
+	@atomic u0::Vector{Float64}
+	@atomic p::Vector{Float64}
 	@atomic ts::Float64
 	@atomic gain::Float64
-	@atomic channel_map::Array{Int}
+	@atomic channel_map::Vector{Int}
 end
 
 mutable struct RealTimeAudioDEStateData
@@ -43,8 +43,8 @@ end
 #! export
 # ODE
 """
-    DESource(f, u0::Array{Float64}, p::Array{Float64};
-		alg = Tsit5(), channel_map::Array{Int} = [1, 1])::DESource
+    DESource(f, u0::Vector{Float64}, p::Vector{Float64};
+		alg = Tsit5(), channel_map::Vector{Int} = [1, 1])::DESource
 
 Create a DESource from an ODEFunction.
 # Arguments
@@ -53,12 +53,12 @@ Create a DESource from an ODEFunction.
 - `p`: the array of parameters.
 # Keyword Arguments
 - `alg::DEAlgorithm = Tsit5()`: the algorithm which will be passed to the solver.
-- `channel_map::Array{Int} = [1, 1]`: the channel map indicates how system's variables \
+- `channel_map::Vector{Int} = [1, 1]`: the channel map indicates how system's variables \
 should be mapped to output channels in the audio device. The position in the array \
 represents the channel number and the value, the variable.
 """
-function DESource(f, u0::Array{Float64}, p::Array{Float64};
-		alg = Tsit5(), channel_map::Array{Int} = [1, 1])::DESource
+function DESource(f, u0::Vector{Float64}, p::Vector{Float64};
+		alg = Tsit5(), channel_map::Vector{Int} = [1, 1])::DESource
 
 	prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 		save_start = true,
@@ -68,8 +68,8 @@ function DESource(f, u0::Array{Float64}, p::Array{Float64};
 	_DESource(prob, alg, channel_map)
 end
 
-function DESource(f::ODEFunction, u0::Array{Float64}, p::Array{Float64};
-	alg = Tsit5(), channel_map::Array{Int} = [1, 1])::DESource
+function DESource(f::ODEFunction, u0::Vector{Float64}, p::Vector{Float64};
+	alg = Tsit5(), channel_map::Vector{Int} = [1, 1])::DESource
 
 prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 	save_start = true,
@@ -82,13 +82,13 @@ end
 #! export
 # SDE
 """
-    DESource(f, g, u0::Array{Float64}, p::Array{Float64};
-		alg = SOSRA(), channel_map::Array{Int} = [1, 1])::DESource
+    DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
+		alg = SOSRA(), channel_map::Vector{Int} = [1, 1])::DESource
 
 Create a Stochastic DESource from a drift function and a noise function.
 """
-function DESource(f, g, u0::Array{Float64}, p::Array{Float64};
-		alg = SOSRA(), channel_map::Array{Int} = [1, 1])::DESource
+function DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
+		alg = SOSRA(), channel_map::Vector{Int} = [1, 1])::DESource
 
 	prob = SDEProblem(f, g, u0, (0.0, 0.01), p; 
 		save_start = true,
@@ -98,8 +98,8 @@ function DESource(f, g, u0::Array{Float64}, p::Array{Float64};
 	_DESource(prob, alg, channel_map)
 end
 
-function DESource(f::SDEFunction, u0::Array{Float64}, p::Array{Float64};
-	alg = SOSRA(), channel_map::Array{Int} = [1, 1])::DESource
+function DESource(f::SDEFunction, u0::Vector{Float64}, p::Vector{Float64};
+	alg = SOSRA(), channel_map::Vector{Int} = [1, 1])::DESource
 
 prob = SDEProblem(f, u0, (0.0, 0.01), p; 
 	save_start = true,
@@ -338,10 +338,10 @@ end
 
 #! export
 """
-    set_u0!(source::DESource, u::Array{Float64})
+    set_u0!(source::DESource, u::Vector{Float64})
 Set the initial values of the system in the DESource.
 """
-function set_u0!(source::DESource, u::Array{Float64})
+function set_u0!(source::DESource, u::Vector{Float64})
 	if length(u) != length(source.data.control.u0)
 		error("u0 has different length than the system.")
 	end
@@ -428,10 +428,10 @@ end
 
 #! export
 """
-    set_channelmap!(source::DESource, channel_map::Array{Int})
+    set_channelmap!(source::DESource, channel_map::Vector{Int})
 Set the channel map of the DESource.
 """
-function set_channelmap!(source::DESource, channel_map::Array{Int})
+function set_channelmap!(source::DESource, channel_map::Vector{Int})
 	# check variables
 	n_vars = length(source.data.problem.u0)::Int
 	for variable in channel_map
