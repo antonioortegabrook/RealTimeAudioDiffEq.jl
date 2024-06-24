@@ -436,4 +436,9 @@ for name in names(@__MODULE__; all = true), prefix in PREFIXES
     end
 end
 
+function __init__()
+    Pa_Initialize()
+    atexit(() -> Pa_Terminate())
+end
+
 end # module
