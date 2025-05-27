@@ -112,14 +112,14 @@ end
 function _DESource(prob::DEProblem, alg, channel_map)::DESource
 
 	n_vars = length(prob.u0)
-	if typeof(channel_map) == Vector{Int}
+	if typeof(channel_map) <: Vector{Int}
 		for (i, variable) in enumerate(channel_map)
 			if variable > n_vars
 				@warn "variable $variable is out of bounds."
 				channel_map[i] = 0
 			end
 		end
-	elseif typeof(channel_map) == Vector{Vector{Int}}
+	elseif typeof(channel_map) <: Vector{Vector{Int}}
 		for (i, channel) in enumerate(channel_map)
 			for (j, variable) in enumerate(channel)
 				if variable > n_vars
@@ -187,7 +187,7 @@ function create_callback()
 		# fill it with zeros.
 		# Here we should also try to interpolate the solution. So far it didn't work.
 		if SciMLBase.successful_retcode(sol)
-			if typeof(channel_map == Vector{Int})
+			if typeof(channel_map) <: Vector{Int}
 				out_idx = 1
 				for i in 1:framesPerBuffer
 					# Channel Map:
@@ -197,12 +197,12 @@ function create_callback()
 						out_idx += 1
 					end
 				end
-			elseif typeof(channel_map == Vector{Vector{Int}})
+			elseif typeof(channel_map) <: Vector{Vector{Int}}
 				out_idx = 1
 				for i in 1:framesPerBuffer
 					# Channel Map:
-					sample = 0.;
-					for channel in channel_map[1:n_channels]	
+					for channel in channel_map[1:n_channels]
+						sample = 0.
 						for variable in channel
 							sample += variable < 1 ? 0. : sol.u[i][variable] * gain
 						end
@@ -462,13 +462,13 @@ Set the channel map of the DESource.
 function set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vector{Vector{Int}}})
 	# check variables
 	n_vars = length(source.data.problem.u0)::Int
-	if typeof(channel_map) == Vector{Int}
+	if typeof(channel_map) <: Vector{Int}
 		for variable in channel_map
 			if variable > n_vars
 				error("variable $variable is out of bounds.")
 			end
 		end
-	elseif typeof(channel_map) == Vector{Vector{Int}}
+	elseif typeof(channel_map) <: Vector{Vector{Int}}
 		for (i, channel) in enumerate(channel_map)
 			for (j, variable) in enumerate(channel)
 				if variable > n_vars
