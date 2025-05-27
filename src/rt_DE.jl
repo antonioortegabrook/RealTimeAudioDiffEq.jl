@@ -174,13 +174,28 @@ function create_callback()
 		# fill it with zeros.
 		# Here we should also try to interpolate the solution. So far it didn't work.
 		if SciMLBase.successful_retcode(sol)
-			out_idx = 1
-			for i in 1:framesPerBuffer
-				# Channel Map:
-				for variable in channel_map[1:n_channels]	
-					sample = variable == 0 ? 0. : sol.u[i][variable] * gain
+			if typeof(channel_map == Vector{Int})
+				out_idx = 1
+				for i in 1:framesPerBuffer
+					# Channel Map:
+					for variable in channel_map[1:n_channels]	
+						sample = variable == 0 ? 0. : sol.u[i][variable] * gain
+						unsafe_store!(out_sample, convert(Cfloat, sample), out_idx)
+						out_idx += 1
+					end
+				end
+			elseif typeof(channel_map == Vector{Vector{Int}})
+				out_idx = 1
+				for i in 1:framesPerBuffer
+					# Channel Map:
+					sample = 0.;
+					for channel in channel_map[1:n_channels]	
+						for variable in channel
+							sample += variable < 1 ? 0. : sol.u[i][variable] * gain
+						end
 					unsafe_store!(out_sample, convert(Cfloat, sample), out_idx)
 					out_idx += 1
+					end
 				end
 			end
 
