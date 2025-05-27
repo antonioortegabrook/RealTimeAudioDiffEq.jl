@@ -44,7 +44,7 @@ end
 # ODE
 """
     DESource(f, u0::Vector{Float64}, p::Vector{Float64};
-		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{int}}} = [1, 1])::DESource
+		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 
 Create a DESource from an ODEFunction.
 # Arguments
@@ -58,7 +58,7 @@ should be mapped to output channels in the audio device. The position in the arr
 represents the channel number and the value, the variable.
 """
 function DESource(f, u0::Vector{Float64}, p::Vector{Float64};
-		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{int}}} = [1, 1])::DESource
+		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 
 	prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 		save_start = true,
@@ -69,7 +69,7 @@ function DESource(f, u0::Vector{Float64}, p::Vector{Float64};
 end
 
 function DESource(f::ODEFunction, u0::Vector{Float64}, p::Vector{Float64};
-	alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{int}}} = [1, 1])::DESource
+	alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 
 prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 	save_start = true,
@@ -83,12 +83,12 @@ end
 # SDE
 """
     DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
-		alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{int}}} = [1, 1])::DESource
+		alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 
 Create a Stochastic DESource from a drift function and a noise function.
 """
 function DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
-		alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{int}}} = [1, 1])::DESource
+		alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 
 	prob = SDEProblem(f, g, u0, (0.0, 0.01), p; 
 		save_start = true,
@@ -99,7 +99,7 @@ function DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
 end
 
 function DESource(f::SDEFunction, u0::Vector{Float64}, p::Vector{Float64};
-	alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{int}}} = [1, 1])::DESource
+	alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 
 prob = SDEProblem(f, u0, (0.0, 0.01), p; 
 	save_start = true,
@@ -456,7 +456,7 @@ end
 
 #! export
 """
-    set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vector{Vector{int}}})
+    set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vector{Vector{Int}}})
 Set the channel map of the DESource.
 """
 function set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vector{Vector{Int}}})
@@ -478,6 +478,8 @@ function set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vecto
 			end
 		end
 	else
+		error("channel_map must be a Vector{Int} or a Vector{Vector{Int}}.")
+	end
 	
 	status = Pa_IsStreamActive(source.data.stream_data.stream[])
 	if status == 1 # stream is running
