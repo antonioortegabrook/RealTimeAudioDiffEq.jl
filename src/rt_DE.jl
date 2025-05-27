@@ -197,6 +197,7 @@ function create_callback()
 						out_idx += 1
 					end
 				end
+			# Vector of Vectors:
 			elseif typeof(channel_map) <: Vector{Vector{Int}}
 				out_idx = 1
 				for i in 1:framesPerBuffer
@@ -208,6 +209,20 @@ function create_callback()
 						end
 					unsafe_store!(out_sample, convert(Cfloat, sample), out_idx)
 					out_idx += 1
+					end
+				end
+			# Gain Matrix:
+			elseif typeof(channel_map) <: Matrix{Float}
+				out_idx = 1
+				for i in 1:framesPerBuffer
+					# Channel Map:
+					for channel in 1:n_channels
+						sample = 0.;
+						for variable in 1:n_variables
+							sample += sol.u[i][variable] * channel_map[variable, channel]
+						end
+						unsafe_store!(out_sample, convert(Cfloat, sample), out_idx)
+						out_idx += 1
 					end
 				end
 			end
