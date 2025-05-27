@@ -2,14 +2,14 @@ include("libportaudio.jl")
 
 using .LibPortAudio
 using DifferentialEquations
-using Atomix: @atomicswap
+using Atomix
 
 mutable struct RealTimeAudioDEControlData
 	@atomic u0::Vector{Float64}
 	@atomic p::Vector{Float64}
 	@atomic ts::Float64
 	@atomic gain::Float64
-	@atomic channel_map::Vector{Int}
+	@atomic channel_map::Vector{Any}
 end
 
 mutable struct RealTimeAudioDEStateData
@@ -44,7 +44,7 @@ end
 # ODE
 """
     DESource(f, u0::Vector{Float64}, p::Vector{Float64};
-		alg = Tsit5(), channel_map::Vector{Int} = [1, 1])::DESource
+		alg = Tsit5(), channel_map::Vector{Any} = [1, 1])::DESource
 
 Create a DESource from an ODEFunction.
 # Arguments
@@ -53,13 +53,13 @@ Create a DESource from an ODEFunction.
 - `p`: the array of parameters.
 # Keyword Arguments
 - `alg::DEAlgorithm = Tsit5()`: the algorithm which will be passed to the solver.
-- `channel_map::Vector{Int} = [1, 1]`: the channel map indicates how system's variables \
+- `channel_map::Vector{Any} = [1, 1]`: the channel map indicates how system's variables \
 should be mapped to output channels in the audio device. The position in the array \
 represents the channel number and the value, the variable.
 """
 function DESource(f, u0::Vector{Float64}, p::Vector{Float64};
-		alg = Tsit5(), channel_map::Vector{Int} = [1, 1])::DESource
-
+		alg = Tsit5(), channel_map::Vector{Any} = [1, 1])::DESource
+	
 	prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 		save_start = true,
 		save_end = true, 
@@ -69,14 +69,14 @@ function DESource(f, u0::Vector{Float64}, p::Vector{Float64};
 end
 
 function DESource(f::ODEFunction, u0::Vector{Float64}, p::Vector{Float64};
-	alg = Tsit5(), channel_map::Vector{Int} = [1, 1])::DESource
+		alg = Tsit5(), channel_map::Vector{Any} = [1, 1])::DESource
 
-prob = ODEProblem(f, u0, (0.0, 0.01), p;  
-	save_start = true,
-	save_end = true, 
-	verbose = false)
+	prob = ODEProblem(f, u0, (0.0, 0.01), p;  
+		save_start = true,
+		save_end = true, 
+		verbose = false)
 
-_DESource(prob, alg, channel_map)
+	_DESource(prob, alg, channel_map)
 end
 
 #! export
@@ -88,7 +88,7 @@ end
 Create a Stochastic DESource from a drift function and a noise function.
 """
 function DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
-		alg = SOSRA(), channel_map::Vector{Int} = [1, 1])::DESource
+		alg = SOSRA(), channel_map::Vector{Any} = [1, 1])::DESource
 
 	prob = SDEProblem(f, g, u0, (0.0, 0.01), p; 
 		save_start = true,
@@ -99,7 +99,7 @@ function DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
 end
 
 function DESource(f::SDEFunction, u0::Vector{Float64}, p::Vector{Float64};
-	alg = SOSRA(), channel_map::Vector{Int} = [1, 1])::DESource
+	alg = SOSRA(), channel_map::Vector{Any} = [1, 1])::DESource
 
 prob = SDEProblem(f, u0, (0.0, 0.01), p; 
 	save_start = true,
@@ -113,8 +113,20 @@ function _DESource(prob::DEProblem, alg, channel_map)::DESource
 
 	n_vars = length(prob.u0)
 	for (i, variable) in enumerate(channel_map)
-		if variable > n_vars
-			@warn "variable $variable is out of bounds."
+		if typeof(variable) <:Int
+			if variable > n_vars
+				@warn "variable $variable is out of bounds."
+				channel_map[i] = 0
+			end
+		elseif typeof(variable) <: StepRange
+			for v in variable
+				if v > n_vars
+					@warn "variable $v is out of bounds."
+					channel_map[i] = 0
+				end
+			end
+		else
+			@warn "variable $variable is not an Int or a StepRange."
 			channel_map[i] = 0
 		end
 	end
@@ -177,8 +189,12 @@ function create_callback()
 			out_idx = 1
 			for i in 1:framesPerBuffer
 				# Channel Map:
-				for variable in channel_map[1:n_channels]	
-					sample = variable == 0 ? 0. : sol.u[i][variable] * gain
+				for variable in channel_map[1:n_channels] # We assume that the channel map is a vector of Ints or StepRanges (but not both)
+					if typeof(variable) <:Int
+						sample = variable == 0 ? 0. : sol.u[i][variable] * gain # * gain = 1 allocation
+					else
+						sample = sum(@view sol.u[i][variable]) * gain	# @view avoids allocation
+					end	
 					unsafe_store!(out_sample, convert(Cfloat, sample), out_idx)
 					out_idx += 1
 				end
@@ -366,7 +382,7 @@ function set_param!(source::DESource, index::Int, value::Float64)
 	if index > length(source.data.control.p) || index < 1
 		error("index out of bounds.")
 	end
-	@atomicswap source.data.control.p[index] = value; value
+	Atomix.@atomic source.data.control.p[index] = value
 end
 
 #! export
@@ -431,12 +447,25 @@ end
     set_channelmap!(source::DESource, channel_map::Vector{Int})
 Set the channel map of the DESource.
 """
-function set_channelmap!(source::DESource, channel_map::Vector{Int})
+function set_channelmap!(source::DESource, channel_map::Vector{Any})
 	# check variables
 	n_vars = length(source.data.problem.u0)::Int
 	for variable in channel_map
-		if variable > n_vars
-			error("variable $variable is out of bounds.")
+		if typeof(variable) <:Int
+			if variable > n_vars
+				@warn "variable $variable is out of bounds."
+				channel_map[i] = 0
+			end
+		elseif typeof(variable) <: StepRange
+			for v in variable
+				if v > n_vars
+					@warn "variable $v is out of bounds."
+					channel_map[i] = 0
+				end
+			end
+		else
+			@warn "variable $variable is not an Int or a StepRange."
+			channel_map[i] = 0
 		end
 	end
 	
