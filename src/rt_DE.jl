@@ -478,6 +478,8 @@ function set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vecto
 			end
 		end
 	else
+		error("channel_map must be a Vector{Int} or a Vector{Vector{Int}}.")
+	end
 	
 	status = Pa_IsStreamActive(source.data.stream_data.stream[])
 	if status == 1 # stream is running
