@@ -9,7 +9,7 @@ mutable struct RealTimeAudioDEControlData
 	@atomic p::Vector{Float64}
 	@atomic ts::Float64
 	@atomic gain::Float64
-	@atomic channel_map::Vector{Any}
+	@atomic channel_map::Union{Vector{Int}, Vector{Vector{Int}}}
 end
 
 mutable struct RealTimeAudioDEStateData
@@ -44,7 +44,7 @@ end
 # ODE
 """
     DESource(f, u0::Vector{Float64}, p::Vector{Float64};
-		alg = Tsit5(), channel_map::Vector{Any} = [1, 1])::DESource
+		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 
 Create a DESource from an ODEFunction.
 # Arguments
@@ -53,12 +53,12 @@ Create a DESource from an ODEFunction.
 - `p`: the array of parameters.
 # Keyword Arguments
 - `alg::DEAlgorithm = Tsit5()`: the algorithm which will be passed to the solver.
-- `channel_map::Vector{Any} = [1, 1]`: the channel map indicates how system's variables \
+- `channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1]`: the channel map indicates how system's variables \
 should be mapped to output channels in the audio device. The position in the array \
 represents the channel number and the value, the variable.
 """
 function DESource(f, u0::Vector{Float64}, p::Vector{Float64};
-		alg = Tsit5(), channel_map::Vector{Any} = [1, 1])::DESource
+		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 	
 	prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 		save_start = true,
@@ -69,7 +69,7 @@ function DESource(f, u0::Vector{Float64}, p::Vector{Float64};
 end
 
 function DESource(f::ODEFunction, u0::Vector{Float64}, p::Vector{Float64};
-		alg = Tsit5(), channel_map::Vector{Any} = [1, 1])::DESource
+		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 
 	prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 		save_start = true,
@@ -88,7 +88,7 @@ end
 Create a Stochastic DESource from a drift function and a noise function.
 """
 function DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
-		alg = SOSRA(), channel_map::Vector{Any} = [1, 1])::DESource
+		alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 
 	prob = SDEProblem(f, g, u0, (0.0, 0.01), p; 
 		save_start = true,
@@ -99,7 +99,7 @@ function DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
 end
 
 function DESource(f::SDEFunction, u0::Vector{Float64}, p::Vector{Float64};
-	alg = SOSRA(), channel_map::Vector{Any} = [1, 1])::DESource
+	alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
 
 prob = SDEProblem(f, u0, (0.0, 0.01), p; 
 	save_start = true,
@@ -118,7 +118,7 @@ function _DESource(prob::DEProblem, alg, channel_map)::DESource
 				@warn "variable $variable is out of bounds."
 				channel_map[i] = 0
 			end
-		elseif typeof(variable) <: StepRange
+		elseif typeof(variable) <: Vector{Int}
 			for v in variable
 				if v > n_vars
 					@warn "variable $v is out of bounds."
@@ -193,7 +193,10 @@ function create_callback()
 					if typeof(variable) <:Int
 						sample = variable == 0 ? 0. : sol.u[i][variable] * gain # * gain = 1 allocation
 					else
-						sample = sum(@view sol.u[i][variable]) * gain	# @view avoids allocation
+						sample = 0.
+						for v in variable
+							sample += sol.u[i][v] * gain	# * gain = 1 allocation
+						end
 					end	
 					unsafe_store!(out_sample, convert(Cfloat, sample), out_idx)
 					out_idx += 1
@@ -447,7 +450,7 @@ end
     set_channelmap!(source::DESource, channel_map::Vector{Int})
 Set the channel map of the DESource.
 """
-function set_channelmap!(source::DESource, channel_map::Vector{Any})
+function set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vector{Vector{Int}}})
 	# check variables
 	n_vars = length(source.data.problem.u0)::Int
 	for variable in channel_map
@@ -456,7 +459,7 @@ function set_channelmap!(source::DESource, channel_map::Vector{Any})
 				@warn "variable $variable is out of bounds."
 				channel_map[i] = 0
 			end
-		elseif typeof(variable) <: StepRange
+		elseif typeof(variable) <: Vector{Int}
 			for v in variable
 				if v > n_vars
 					@warn "variable $v is out of bounds."
