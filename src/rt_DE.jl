@@ -83,7 +83,7 @@ end
 # SDE
 """
     DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
-		alg = SOSRA(), channel_map::Vector{Int} = [1, 1])::DESource
+		alg = SOSRA(), channel_map::Union{Vector{Int},Vector{StepRange{Int,Int}}} = [1, 1])::DESource
 
 Create a Stochastic DESource from a drift function and a noise function.
 """
@@ -447,7 +447,7 @@ end
 
 #! export
 """
-    set_channelmap!(source::DESource, channel_map::Vector{Int})
+    set_channelmap!(source::DESource, channel_map::Union{Vector{Int},Vector{StepRange{Int,Int}}})
 Set the channel map of the DESource.
 """
 function set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vector{Vector{Int}}})
