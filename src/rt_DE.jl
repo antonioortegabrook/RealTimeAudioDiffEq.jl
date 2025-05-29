@@ -2,14 +2,14 @@ include("libportaudio.jl")
 
 using .LibPortAudio
 using DifferentialEquations
-using Atomix: @atomicswap
+using Atomix: @atomic, @atomicswap
 
 mutable struct RealTimeAudioDEControlData
 	@atomic u0::Vector{Float64}
 	@atomic p::Vector{Float64}
 	@atomic ts::Float64
 	@atomic gain::Float64
-	@atomic channel_map::Union{Vector{Int}, Vector{Vector{Int}}}
+	@atomic channel_map::Union{Vector{Int}, Vector{Vector{Int}}, Matrix{T} where T<:Real}
 end
 
 mutable struct RealTimeAudioDEStateData
@@ -44,7 +44,7 @@ end
 # ODE
 """
     DESource(f, u0::Vector{Float64}, p::Vector{Float64};
-		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
+		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}, Matrix{T} where T<:Real} = [1, 1])::DESource
 
 Create a DESource from an ODEFunction.
 # Arguments
@@ -58,7 +58,7 @@ should be mapped to output channels in the audio device. The position in the arr
 represents the channel number and the value, the variable.
 """
 function DESource(f, u0::Vector{Float64}, p::Vector{Float64};
-		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
+		alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}, Matrix{T} where T<:Real} = [1, 1])::DESource
 
 	prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 		save_start = true,
@@ -69,7 +69,7 @@ function DESource(f, u0::Vector{Float64}, p::Vector{Float64};
 end
 
 function DESource(f::ODEFunction, u0::Vector{Float64}, p::Vector{Float64};
-	alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
+	alg = Tsit5(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}, Matrix{T} where T<:Real} = [1, 1])::DESource
 
 prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 	save_start = true,
@@ -83,12 +83,12 @@ end
 # SDE
 """
     DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
-		alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
+		alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}, Matrix{T} where T<:Real} = [1, 1])::DESource
 
 Create a Stochastic DESource from a drift function and a noise function.
 """
 function DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
-		alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
+		alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}, Matrix{T} where T<:Real} = [1, 1])::DESource
 
 	prob = SDEProblem(f, g, u0, (0.0, 0.01), p; 
 		save_start = true,
@@ -99,7 +99,7 @@ function DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
 end
 
 function DESource(f::SDEFunction, u0::Vector{Float64}, p::Vector{Float64};
-	alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}} = [1, 1])::DESource
+	alg = SOSRA(), channel_map::Union{Vector{Int}, Vector{Vector{Int}}, Matrix{T} where T<:Real} = [1, 1])::DESource
 
 prob = SDEProblem(f, u0, (0.0, 0.01), p; 
 	save_start = true,
@@ -128,7 +128,18 @@ function _DESource(prob::DEProblem, alg, channel_map)::DESource
 				end
 			end
 		end
+	elseif typeof(channel_map) <: Matrix{T} where T<:Real
+		n_channels = size(channel_map, 2)
+		for channel in 1:n_channels
+			for (variable, value) in enumerate(channel_map[:, channel])
+				if variable > n_vars
+					@warn "variable $variable is out of bounds."
+					channel_map[variable, channel] = 0.
+				end
+			end
+		end
 	else
+		# (unreachable)
 		error("channel_map must be a Vector{Int} or a Vector{Vector{Int}}.")
 	end
 
@@ -211,16 +222,17 @@ function create_callback()
 					out_idx += 1
 					end
 				end
-			# Gain Matrix:
-			elseif typeof(channel_map) <: Matrix{Float}
+			# Gain Matrix: (columns are channels, rows are variables)
+			elseif typeof(channel_map) <: Matrix{T} where T<:Real
 				out_idx = 1
 				for i in 1:framesPerBuffer
 					# Channel Map:
 					for channel in 1:n_channels
 						sample = 0.;
-						for variable in 1:n_variables
-							sample += sol.u[i][variable] * channel_map[variable, channel]
+						for (variable, g) in enumerate(channel_map[:, channel])
+							sample += sol.u[i][variable] * g
 						end
+						sample *= gain
 						unsafe_store!(out_sample, convert(Cfloat, sample), out_idx)
 						out_idx += 1
 					end
@@ -275,7 +287,9 @@ function start_DESource(source::DESource, output_device::PaDeviceIndex;
 	end
 	output_device_info = unsafe_load(Pa_GetDeviceInfo(output_device))
 
-	n_channels = length(source.data.control.channel_map)
+	n_channels = typeof(source.data.control.channel_map) <: Matrix{T} where T<:Real ? 
+						size(source.data.control.channel_map, 2) : 
+						length(source.data.control.channel_map)
 	if output_device_info.maxOutputChannels < n_channels
 		@warn "output device has less channels than channel map"
 		n_channels = output_device_info.maxOutputChannels
@@ -471,10 +485,10 @@ end
 
 #! export
 """
-    set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vector{Vector{Int}}})
+    set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vector{Vector{Int}}, Matrix{T} where T<:Real})
 Set the channel map of the DESource.
 """
-function set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vector{Vector{Int}}})
+function set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vector{Vector{Int}}, Matrix{T} where T<:Real})
 	# check variables
 	n_vars = length(source.data.problem.u0)::Int
 	if typeof(channel_map) <: Vector{Int}
@@ -492,15 +506,22 @@ function set_channelmap!(source::DESource, channel_map::Union{Vector{Int}, Vecto
 				end
 			end
 		end
-	else
+	elseif typeof(channel_map) <: Matrix{T} where T<:Real
+		if size(channel_map, 1) > n_vars
+			@warn "$(size(channel_map, 1) - n_vars) variable(s) out of bounds."
+		end
+	else	# (unreachable)
 		error("channel_map must be a Vector{Int} or a Vector{Vector{Int}}.")
 	end
 	
 	status = Pa_IsStreamActive(source.data.stream_data.stream[])
 	if status == 1 # stream is running
 		# check number of channels
-		if length(channel_map) > source.data.stream_data.n_channels
-			error("channel map has more channels than the stream. Stop the source and try again.")
+		n_channels_in_map = typeof(channel_map) <: Matrix{T} where T<:Real ? 
+						size(channel_map, 2) : 
+						length(channel_map)
+		if n_channels_in_map != source.data.stream_data.n_channels
+			error("# of channels in channel map and # of channels in the stream don't match. Stop the source and try again.")
 		end
 	end
 
