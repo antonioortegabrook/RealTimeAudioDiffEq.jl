@@ -10,7 +10,7 @@ libportaudio_jll = "2d7b7beb-0762-5160-978e-1ab83a1e8a31"
 
 [compat]
 julia = "1.7"
-Atomix = "^0.1.0"
+Atomix = "^1.1.0"
 DifferentialEquations = "^7.0.0"
 
 [extras]
