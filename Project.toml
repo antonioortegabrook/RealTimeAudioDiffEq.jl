@@ -1,7 +1,7 @@
 name = "RealTimeAudioDiffEq"
 uuid = "7a3f4937-0cad-4220-a144-0330815b2118"
 authors = ["Antonio Ortega Brook <antonioortegabrook@me.com> and contributors"]
-version = "0.0.2"
+version = "0.1.0"
 
 [deps]
 Atomix = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
@@ -9,8 +9,8 @@ DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
 libportaudio_jll = "2d7b7beb-0762-5160-978e-1ab83a1e8a31"
 
 [compat]
-julia = "1.7"
-Atomix = "^0.1.0"
+julia = "1.10"
+Atomix = "^1.1.0"
 DifferentialEquations = "^7.0.0"
 
 [extras]
