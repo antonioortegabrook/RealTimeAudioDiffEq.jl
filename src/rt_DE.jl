@@ -1,7 +1,17 @@
 include("libportaudio.jl")
 
 using .LibPortAudio
-using DifferentialEquations
+using SciMLBase: AbstractDEAlgorithm,
+    AbstractSciMLProblem,
+    ODEFunction,
+    ODEProblem,
+    SDEFunction,
+    SDEProblem,
+    remake,
+    solve,
+    successful_retcode
+using OrdinaryDiffEqTsit5: Tsit5
+using StochasticDiffEq: SOSRA
 using Atomix: @atomic, @atomicswap
 
 mutable struct RealTimeAudioDEControlData
@@ -26,8 +36,8 @@ mutable struct RealTimeAudioDEStreamData
 end
 
 mutable struct RealTimeAudioDEData
-	problem::DEProblem
-	alg::DEAlgorithm
+	problem::AbstractSciMLProblem
+	alg::AbstractDEAlgorithm
 	control::RealTimeAudioDEControlData
 	state::RealTimeAudioDEStateData
 	stream_data::RealTimeAudioDEStreamData
@@ -52,7 +62,7 @@ Create a DESource from an ODEFunction.
 - `u0`: the array of initial values.
 - `p`: the array of parameters.
 # Keyword Arguments
-- `alg::DEAlgorithm = Tsit5()`: the algorithm which will be passed to the solver.
+- `alg::AbstractDEAlgorithm = Tsit5()`: the algorithm which will be passed to the solver.
 - `channel_map::Vector{Int} = [1, 1]`: the channel map indicates how system's variables \
 should be mapped to output channels in the audio device. The position in the array \
 represents the channel number and the value, the variable.
@@ -62,8 +72,7 @@ function DESource(f, u0::Vector{Float64}, p::Vector{Float64};
 
 	prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 		save_start = true,
-		save_end = true, 
-		verbose = false)
+		save_end = true)
 
 	_DESource(prob, alg, channel_map)
 end
@@ -73,8 +82,7 @@ function DESource(f::ODEFunction, u0::Vector{Float64}, p::Vector{Float64};
 
 prob = ODEProblem(f, u0, (0.0, 0.01), p;  
 	save_start = true,
-	save_end = true, 
-	verbose = false)
+	save_end = true)
 
 _DESource(prob, alg, channel_map)
 end
@@ -92,8 +100,7 @@ function DESource(f, g, u0::Vector{Float64}, p::Vector{Float64};
 
 	prob = SDEProblem(f, g, u0, (0.0, 0.01), p; 
 		save_start = true,
-		save_end = true, 
-		verbose = false)
+		save_end = true)
 
 	_DESource(prob, alg, channel_map)
 end
@@ -103,13 +110,12 @@ function DESource(f::SDEFunction, u0::Vector{Float64}, p::Vector{Float64};
 
 prob = SDEProblem(f, u0, (0.0, 0.01), p; 
 	save_start = true,
-	save_end = true, 
-	verbose = false)
+	save_end = true)
 
 _DESource(prob, alg, channel_map)
 end
 
-function _DESource(prob::DEProblem, alg, channel_map)::DESource
+function _DESource(prob::AbstractSciMLProblem, alg::AbstractDEAlgorithm, channel_map)::DESource
 
 	n_vars = length(prob.u0)
 	if typeof(channel_map) <: Vector{Int}
@@ -197,7 +203,7 @@ function create_callback()
 		# If the solver finished correctly, we update the output buffer. Otherwise, we
 		# fill it with zeros.
 		# Here we should also try to interpolate the solution. So far it didn't work.
-		if SciMLBase.successful_retcode(sol)
+		if successful_retcode(sol)
 			if typeof(channel_map) <: Vector{Int}
 				out_idx = 1
 				for i in 1:framesPerBuffer

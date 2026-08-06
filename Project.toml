@@ -5,13 +5,17 @@ version = "0.1.0"
 
 [deps]
 Atomix = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
-DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
+OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+StochasticDiffEq = "789caeaf-c7a9-5a7d-9973-96adeb23e2a0"
 libportaudio_jll = "2d7b7beb-0762-5160-978e-1ab83a1e8a31"
 
 [compat]
 julia = "1.10"
 Atomix = "^1.1.0"
-DifferentialEquations = "^7.0.0"
+OrdinaryDiffEqTsit5 = "1, 2"
+SciMLBase = "2.116, 3"
+StochasticDiffEq = "6, 7"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
