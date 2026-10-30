@@ -1,95 +1,55 @@
 # RealTimeAudioDiffEq
 
-Real-time audio from ordinary and stochastic differential equations (ODEs and
-SDEs), using SciML's persistent integrator interface.
+[![Build Status](https://github.com/antonioortegabrook/RealTimeAudioDiffEq.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/antonioortegabrook/RealTimeAudioDiffEq.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
-This branch replaces per-block solving with an initialized integrator advanced by `step!`.
+A simple Julia package for real-time audification of ODEs and SDEs
 
-## Install and run
-
-For a local checkout:
-
+### Install:
 ```julia
-using Pkg
-Pkg.develop(path="/path/to/RealTimeAudioDiffEq.jl")
+import Pkg
+Pkg.add(url="https://github.com/antonioortegabrook/RealTimeAudioDiffEq.jl")
 ```
 
-Start Julia with at least two threads for playback (`julia --threads=2`). Offline
-rendering also works with one thread.
+### Usage example:
+Start Julia with at least two threads (`julia --threads=2`).
 
 ```julia
 using RealTimeAudioDiffEq
 
-function oscillator!(du, u, p, t)
+function duffing!(du, u, p, t)
     du[1] = u[2]
-    du[2] = -p[1] * u[1] - p[2] * u[2]
+    du[2] = -p[1] * u[2] + u[1] * (p[2] - u[1] * u[1]) + p[3] * cos(p[4] * t)
 end
 
-source = DESource(oscillator!, [0.1, 0.0], [1.0, 0.01]; channel_map=[1, 2])
-set_ts!(source, 2pi * 220)
-start_DESource(source, get_default_output_device(); sample_rate=48000,
-    buffer_size=256, substeps=4)
-set_param!(source, 2, 0.02)
-set_gain!(source, 0.5)
+u0 = [0.1, 0.]
+p = [0.15, 1.0, 2.5, 0.5]
+
+source = DESource(duffing!, u0, p; channel_map = [1, 2])
+set_ts!(source, 1600.)
+
+output_device = get_default_output_device()
+```
+Start audio:
+```julia
+start_DESource(source, output_device)
+```
+Change system's parameters in real-time:
+```julia
+# set parameter 1 to 0.75
+set_param!(source, 1, 0.75)
+```
+Stop audio:
+```julia
 stop_DESource(source)
 ```
 
-`get_devices()` lists device names, channel counts, and indices. Select an
-output-capable device explicitly if the system default is unsuitable.
+Audio reuses a SciML integrator through `step!`. The `alg` keyword selects the
+method (`Tsit5()` for ODEs, `SOSRA()` for SDEs). Integration uses fixed steps,
+`dt = timescale / sample_rate / substeps`; increase `substeps` when needed for
+accuracy. Adaptive error control is disabled.
 
-An SDE supplies an additional in-place noise function:
-
-```julia
-noise!(du, u, p, t) = fill!(du, p[3])
-source = DESource(oscillator!, noise!, [0.1, 0.0], [1.0, 0.01, 0.001])
-```
-
-## Solver and audio behavior
-
-The `alg` keyword selects a SciML algorithm. Defaults are `Tsit5()` for ODEs and
-`SOSRA()` for SDEs. A compatible stiff ODE algorithm can also be passed after
-loading its SciML package; allocation and timing depend on that algorithm and
-the user equation. This branch uses fixed steps, with
-`dt = timescale / sample_rate / substeps`. It does not enable adaptive error
-control or promise compatibility with every algorithm.
-
-The producer reuses its integrator, sample buffer, and typed rendering loop.
-PortAudio's callback copies completed samples from a bounded queue. The
-default four queued blocks provide scheduling headroom and add latency.
-
-Channel maps accept variable indices (`0` means silence), lists of indices,
-or a variables-by-channels gain matrix. Controls publish copies and take effect
-at block boundaries. Getters return copies: use `set_param!`, `set_gain!`,
-`set_ts!`, and `set_channelmap!` to change playback. Stop playback before
-changing its channel count.
-
-`stop_DESource` preserves the last produced solver state. Starting again
-continues from it; `reset_state!` requests the initial state. Samples already
-queued may be ahead of the last sample heard. Non-finite output or solver
-failure silences the block and latches silence until reset or preparation.
-
-## Offline rendering and tests
-
-```julia
-prepare!(source; sample_rate=48000, buffer_size=256, substeps=4)
-buffer = zeros(Float32, 512) # 256 interleaved stereo frames
-render!(buffer, source)
-```
-
-Repeated calls continue the same trajectory. Offline rendering and inspection
-require a stopped source. `integrator_info(source)` and
-`audio_debug_status(source)` expose state and stream counters.
-
-Run the suite from the package checkout:
-
-```sh
-julia --threads=2 --project -e 'using Pkg; Pkg.instantiate(); Pkg.test()'
-```
-
-Tests cover numerical sample timing, block continuity, control changes, reset,
-SDE variance and noise storage, queue wraparound, concurrent publication,
-failure recovery, and operation beyond one million solver steps. The warmed
-tested ODE/SDE rendering and callback paths allocate zero Julia heap bytes.
-Setup, control publication, resets, other algorithms, and allocating user
-equations are outside that claim. Julia GC and operating-system scheduling
-still prevent a hard real-time guarantee.
+A producer renders ahead of the PortAudio callback into a reusable queue.
+`start_DESource` defaults to 256 frames and `queue_blocks=4`; buffering adds
+latency. Controls apply at block boundaries, and array getters return copies:
+use the setters to change playback. `prepare!` and `render!` also support
+offline rendering without an audio device.
