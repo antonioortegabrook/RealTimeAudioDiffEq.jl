@@ -3,8 +3,14 @@ module RealTimeAudioDiffEq
 include("rt_DE.jl")
 
 export DESource,
+	prepare!,
+	render!,
 	start_DESource,
 	stop_DESource,
+	audio_debug_status,
+	integrator_info,
+	probe_integrator!,
+	current_mix_snapshot,
 	isinitialized,
 	isactive,
 	isstopped,
