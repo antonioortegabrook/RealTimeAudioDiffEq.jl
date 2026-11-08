@@ -8,7 +8,7 @@ using OrdinaryDiffEqTsit5: Tsit5
 using StochasticDiffEq: SOSRA
 using Base.Threads: Atomic
 
-# One writer per index; publish only after copying complete frames.
+# One writer per index, publish only after copying complete frames.
 mutable struct RBAudio
     buf::Vector{Float32}
     mask::Int
@@ -16,7 +16,7 @@ mutable struct RBAudio
     r::Atomic{Int}
 end
 
-# The type parameter lets Julia specialize the complete sample loop.
+# Dispatch on the integrator type keeps the sample loop specialized.
 mutable struct AudioRenderer{I}
     integrator::I
     parameters::Vector{Float64}
@@ -26,7 +26,7 @@ mutable struct AudioRenderer{I}
     failed::Bool
 end
 
-# Setters publish copies; only the producer mutates the integrator.
+# Setters publish copies, only the producer mutates the integrator.
 mutable struct RealTimeAudioDEControlData
     @atomic u0::Vector{Float64}
     @atomic p::Vector{Float64}
@@ -190,7 +190,7 @@ function _render_block!(out::AbstractVector{Float32}, r::AudioRenderer, c, nch::
     integ = r.integrator
     nvars = length(integ.u)
     index = firstindex(out)
-    # Sample before stepping, matching upstream's save_start=true.
+    # Sample the current state, then advance to the next audio frame.
     for _ in 1:(length(out) ÷ nch)
         @inbounds for ch in 1:nch
             sample = 0.0
@@ -247,6 +247,7 @@ function prepare!(source::DESource; sample_rate::Real=48000.0,
     p = @atomic d.control.p
     ts = @atomic d.control.ts
     prob = remake(d.problem; u0=copy(d.state.u), p=copy(p), tspan=(d.state.t, Inf))
+    # Playback has no final time and must not accumulate solution or noise history.
     integ = init(prob, d.alg; dt=ts / sample_rate / substeps,
         adaptive=false, save_on=false, save_start=false, save_end=false,
         save_everystep=false, dense=false, save_noise=false, maxiters=typemax(Int))
@@ -263,7 +264,8 @@ end
     render!(out::AbstractVector{Float32}, source)
 
 Fill caller-owned interleaved audio using a prepared, stopped source. Controls
-apply once per block. Solver failure silences output until reset or preparation.
+apply once per block. Non-finite values or solver error codes silence output
+until reset or preparation; exceptions from the model or solver propagate.
 """
 function render!(out::AbstractVector{Float32}, source::DESource)
     d = source.data
@@ -455,7 +457,7 @@ function start_DESource(source::DESource, output_device::PaDeviceIndex;
     nothing
 end
 
-"""Stop the producer, close PortAudio, and preserve the last rendered solver state."""
+"""Stop playback and preserve the last rendered state, which may be ahead of heard audio."""
 function stop_DESource(source::DESource)
     d = source.data
     d.running[] = false
@@ -543,6 +545,7 @@ function set_channelmap!(source::DESource, channel_map)
 end
 get_channelmap(source::DESource) = copy(@atomic source.data.control.channel_map)
 
+"""Read stream counters and queue occupancy; concurrent values may change between reads."""
 function audio_debug_status(source::DESource)
     d = source.data
     rb = d.rb
@@ -559,11 +562,13 @@ function _stopped_integrator(source)
     source.data.integrator
 end
 
+"""Return solver time, step size, and element types for a prepared, stopped source."""
 function integrator_info(source::DESource)
     integ = _stopped_integrator(source)
     (; t=integ.t, dt=integ.dt, eltype_u=eltype(integ.u), eltype_p=eltype(integ.p))
 end
 
+"""Mix the current state without advancing a prepared, stopped source."""
 function current_mix_snapshot(source::DESource)
     integ = _stopped_integrator(source)
     G = @atomic source.data.control.channel_map
@@ -575,6 +580,7 @@ function current_mix_snapshot(source::DESource)
     (; t=integ.t, sample)
 end
 
+"""Advance a stopped integrator by `n` solver steps, bypassing audio and control updates."""
 function probe_integrator!(source::DESource; n=1024, take=16)
     integ = _stopped_integrator(source)
     n >= 0 && take >= 0 || throw(ArgumentError("n and take must be nonnegative"))

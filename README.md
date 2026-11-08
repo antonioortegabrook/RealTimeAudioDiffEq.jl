@@ -53,3 +53,7 @@ A producer renders ahead of the PortAudio callback into a reusable queue.
 latency. Controls apply at block boundaries, and array getters return copies:
 use the setters to change playback. `prepare!` and `render!` also support
 offline rendering without an audio device.
+
+Reusing solver storage and audio buffers reduces allocation and garbage
+collection pressure. Julia and the operating system still cannot guarantee
+that every audio deadline will be met.

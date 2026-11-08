@@ -222,7 +222,7 @@ end
     set_param!(s, 1, 3.0)
     @test (@allocated render!(out, s)) == 0
     before = integrator_info(s).t
-    # Exceed the old fork's default 1e6-step limit without retaining history.
+    # Check uninterrupted stepping beyond one million steps.
     for _ in 1:4000
         render!(out, s)
     end
